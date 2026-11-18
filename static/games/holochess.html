@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HoloChess 3D AI & Audio - Ultimate FX Update V2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050510; color: white; font-family: 'Inter', sans-serif; user-select: none; touch-action: none; }
+        canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+        
+        .glass-panel {
+            background: rgba(15, 20, 30, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .btn-shop { transition: all 0.2s; border: 1px solid transparent; }
+        .btn-shop:hover { background: rgba(255, 255, 255, 0.1); }
+        .btn-shop.selected { border-color: #00f3ff; background: rgba(0, 243, 255, 0.15); box-shadow: 0 0 10px rgba(0, 243, 255, 0.3); }
+        
+        #loading {
+            position: absolute; inset: 0; z-index: 50; display: flex;
+            align-items: center; justify-content: center; background: #050510;
+            transition: opacity 0.5s;
+        }
+        
+        .radar-cell { width: 12.5%; height: 12.5%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; font-size: clamp(10px, 2vh, 14px); }
+        
+        #settings-modal {
+            position: absolute; inset: 0; z-index: 60; display: none;
+            align-items: center; justify-content: center; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+        }
+        .slider-container { display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; margin-bottom: 1rem; }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.1); height: 4px; border-radius: 2px; outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 15px; height: 15px; border-radius: 50%; background: #00f3ff; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Overlay -->
+    <div id="loading"><h1 class="text-xl md:text-2xl font-bold tracking-widest animate-pulse text-[#00f3ff]">INITIALIZING 3D ENGINE...</h1></div>
+
+    <!-- UI Layer -->
+    <div class="absolute inset-0 pointer-events-none p-2 md:p-4 flex flex-col justify-between z-10">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-start w-full">
+            <div class="pointer-events-auto flex flex-col gap-1 md:gap-2">
+                <button id="undo-btn" onclick="undoAction()" disabled
+                    class="px-3 md:px-4 py-1.5 md:py-2 rounded-lg border border-white/20 bg-white/5 text-gray-500 text-[10px] md:text-xs font-bold tracking-widest transition disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/10 glass-panel">
+                    ↶ UNDO
+                </button>
+                <button id="settings-btn" onclick="openSettings()"
+                    class="px-3 md:px-4 py-1.5 md:py-2 rounded-lg border border-[#00f3ff] text-[#00f3ff] text-[10px] md:text-xs font-bold tracking-widest transition hover:bg-[#00f3ff]/10 glass-panel">
+                    ⚙ SETTINGS
+                </button>
+                <div id="turn-indicator" class="hidden px-2 md:px-3 py-1 rounded text-center font-bold tracking-widest border border-[#00f3ff] text-[#00f3ff] bg-[#00f3ff]/20 text-[10px] md:text-xs shadow-[0_0_10px_rgba(0,243,255,0.4)]">
+                    WHITE'S TURN
+                </div>
+                <div id="ai-thinking" class="hidden px-2 md:px-3 py-1 rounded text-center font-bold text-[9px] md:text-xs tracking-widest text-[#ff0055] animate-pulse bg-[#ff0055]/10 border border-[#ff0055]/50">
+                    BOT COMPUTING...
+                </div>
+            </div>
+
+            <!-- Setup Info & Theme -->
+            <div class="pointer-events-auto flex flex-col items-end gap-1 md:gap-2">
+                <div id="setup-info" class="glass-panel p-2 md:p-4 rounded-xl flex flex-col gap-1.5 md:gap-3 min-w-[200px] md:min-w-[250px] shadow-lg">
+                    <h2 class="text-[9px] md:text-xs text-gray-400 tracking-widest border-b border-gray-600 pb-0.5 md:pb-1 mt-0.5 md:mt-1 text-center">ENERGY POINTS</h2>
+                    <div class="flex justify-between gap-2 md:gap-4">
+                        <div class="text-center w-full">
+                            <div id="text-pt-white" class="text-[9px] md:text-[10px] text-[#00f3ff] font-bold">WHITE</div>
+                            <div id="pt-white" class="text-lg md:text-xl font-mono text-white">0</div>
+                        </div>
+                        <div class="text-center w-full">
+                            <div id="text-pt-black" class="text-[9px] md:text-[10px] text-[#ff0055] font-bold">BLACK</div>
+                            <div id="pt-black" class="text-lg md:text-xl font-mono text-white">0</div>
+                        </div>
+                    </div>
+                    <p class="text-[8px] md:text-[10px] text-gray-400 leading-tight text-center">Klik bidak untuk menjual (Raja tak bisa).</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="flex flex-col md:flex-row justify-center md:justify-between items-center md:items-end w-full gap-2 md:gap-4 pb-0 md:pb-2">
+            <div class="hidden md:block w-72"></div> <!-- Spacer -->
+
+            <!-- 2D Tactical Minimap -->
+            <div id="minimap-container" class="pointer-events-auto">
+                <div class="glass-panel p-1.5 md:p-2 rounded-xl flex flex-col items-center gap-1 md:gap-2 shadow-2xl relative z-20">
+                    <span class="text-[8px] md:text-[10px] text-gray-400 tracking-widest uppercase border-b border-gray-600 pb-0.5 md:pb-1 w-full text-center">2D Radar Board</span>
+                    <div id="minimap" class="flex flex-wrap w-36 h-36 md:w-48 md:h-48 border border-gray-600 rounded overflow-hidden bg-black/50">
+                        <!-- JS generated cells -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shop & Mode Panel -->
+            <div id="shop-panel" class="glass-panel p-2 md:p-4 rounded-xl pointer-events-auto w-64 md:w-80 flex flex-col gap-1.5 md:gap-2">
+                <h3 class="text-[9px] md:text-xs text-gray-400 tracking-widest border-b border-gray-600 pb-0.5 md:pb-1 text-center">CUSTOM UNITS</h3>
+                <div class="grid grid-cols-2 gap-1.5 md:gap-2">
+                    <button id="shop-assassin" class="btn-shop bg-white/5 rounded p-1 md:p-2 text-center group" onclick="selectShop('assassin')">
+                        <div class="text-[#00f3ff] font-bold text-[9px] md:text-xs">ASSASSIN</div>
+                        <div class="text-gray-400 text-[8px] md:text-[10px] mt-0.5 md:mt-1">Jump 3 squares</div>
+                        <div class="text-white font-mono text-[10px] md:text-xs mt-0.5 md:mt-1">30 PT</div>
+                    </button>
+                    <button id="shop-shield" class="btn-shop bg-white/5 rounded p-1 md:p-2 text-center group" onclick="selectShop('shield')">
+                        <div class="text-[#00f3ff] font-bold text-[9px] md:text-xs">SHIELD</div>
+                        <div class="text-gray-400 text-[8px] md:text-[10px] mt-0.5 md:mt-1">Move 1 sq</div>
+                        <div class="text-white font-mono text-[10px] md:text-xs mt-0.5 md:mt-1">15 PT</div>
+                    </button>
+                </div>
+                
+                <!-- NEW SPLIT GAME MODE SELECTION -->
+                <div class="flex justify-between gap-2 mt-1 border-t border-gray-600 pt-2">
+                    <div class="w-full">
+                        <div id="lbl-team-white" class="text-[9px] md:text-[10px] font-bold text-[#00f3ff] text-center mb-1 tracking-widest">WHITE TEAM</div>
+                        <select id="sel-white" class="bg-black/50 text-white border border-[#00f3ff]/50 rounded p-1 w-full text-[8px] md:text-[9px] tracking-widest outline-none">
+                            <option value="player" selected>PLAYER</option>
+                            <option value="bot_basic">BOT (BASIC)</option>
+                            <option value="bot_gemini">AI GEMINI PRO 4.1</option>
+                            <option value="bot_astra">AI CHAT GPT ASTRA 6.1</option>
+                        </select>
+                    </div>
+                    <div class="w-full">
+                        <div id="lbl-team-black" class="text-[9px] md:text-[10px] font-bold text-[#ff0055] text-center mb-1 tracking-widest">BLACK TEAM</div>
+                        <select id="sel-black" class="bg-black/50 text-white border border-[#ff0055]/50 rounded p-1 w-full text-[8px] md:text-[9px] tracking-widest outline-none">
+                            <option value="player">PLAYER</option>
+                            <option value="bot_basic" selected>BOT (BASIC)</option>
+                            <option value="bot_gemini">AI GEMINI PRO 4.1</option>
+                            <option value="bot_astra">AI CHAT GPT ASTRA 6.1</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button onclick="startGame()" class="mt-2 w-full bg-gradient-to-r from-[#00f3ff] to-blue-600 hover:brightness-125 text-white font-bold py-1.5 md:py-2 rounded text-[10px] md:text-sm tracking-widest transition shadow-[0_0_15px_rgba(0,243,255,0.4)]">
+                    START BATTLE
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pawn promotion modal -->
+    <div id="promotion-modal" class="hidden absolute inset-0 z-[70] items-center justify-center bg-black/85 backdrop-blur-sm pointer-events-auto p-4">
+        <div class="glass-panel w-full max-w-sm rounded-xl p-4 border border-[#00f3ff]/60">
+            <h2 class="text-center text-sm font-bold tracking-widest text-[#00f3ff] mb-2">PAWN PROMOTION</h2>
+            <p id="promotion-message" class="text-center text-xs text-gray-300 mb-3">Pilih kembali bidak milik tim yang sudah tertangkap.</p>
+            <div id="promotion-options" class="grid grid-cols-2 gap-2"></div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="pointer-events-auto">
+        <div class="glass-panel p-6 rounded-xl border border-[#00f3ff] shadow-[0_0_20px_rgba(0,243,255,0.3)] w-80">
+            <h2 class="text-lg font-bold text-[#00f3ff] mb-4 tracking-widest text-center border-b border-[#00f3ff]/30 pb-2">SETTINGS</h2>
+            
+            <div class="flex flex-col gap-2 mt-2 border-b border-white/20 pb-4 mb-4">
+                <span class="text-xs tracking-widest text-[#00f3ff]">VISUAL THEME</span>
+                <button id="theme-toggle-btn" onclick="toggleTheme()" class="w-full py-2 rounded text-xs font-bold tracking-widest border border-[#00f3ff] text-[#00f3ff] hover:bg-[#00f3ff]/10 transition">
+                    THEME: CYBER NEON
+                </button>
+            </div>
+            
+            <div class="slider-container">
+                <span class="text-xs tracking-widest w-16">MUSIC</span>
+                <input type="range" id="music-vol" min="-60" max="0" value="-15" oninput="updateMusicVolume(this.value)">
+            </div>
+            
+            <div class="slider-container">
+                <span class="text-xs tracking-widest w-16">SFX</span>
+                <input type="range" id="sfx-vol" min="-60" max="0" value="-5" oninput="updateSFXVolume(this.value)">
+            </div>
+
+            <button onclick="closeSettings()" class="mt-4 w-full py-2 bg-white/10 hover:bg-white/20 border border-white/30 rounded text-xs font-bold tracking-widest transition">CLOSE</button>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over" class="hidden absolute inset-0 z-40 bg-black/80 backdrop-blur flex items-center justify-center pointer-events-auto">
+        <div class="glass-panel p-6 md:p-10 rounded-2xl text-center border-[#00f3ff] border">
+            <h1 id="winner-text" class="text-3xl md:text-5xl font-bold text-[#00f3ff] mb-2 drop-shadow-[0_0_15px_rgba(0,243,255,0.8)]">WHITE WINS</h1>
+            <p class="text-gray-400 tracking-widest mb-6 md:mb-8 text-xs md:text-sm">ENEMY KING DESTROYED</p>
+            <button onclick="location.reload()" class="bg-[#00f3ff] text-black px-4 md:px-6 py-2 rounded font-bold tracking-widest hover:bg-white transition text-xs md:text-base">REBOOT SYSTEM</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    
+    <script>
+        // === AUDIO SYSTEM (Tone.js) ===
+        let audioInitialized = false;
+        const sfxVolumeNode = new Tone.Volume(-5).toDestination();
+        const musicVolumeNode = new Tone.Volume(-15).toDestination();
+        
+        const synthClick = new Tone.Synth({ oscillator: { type: "square" }, envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 } }).connect(sfxVolumeNode);
+        const synthMove = new Tone.MembraneSynth({ pitchDecay: 0.1, octaves: 4, oscillator: { type: "sine" }, envelope: { attack: 0.01, decay: 0.4, sustain: 0.01, release: 1.4 } }).connect(sfxVolumeNode);
+        const synthCapture = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.005, decay: 0.4, sustain: 0 } }).connect(sfxVolumeNode);
+        const synthImpact = new Tone.MembraneSynth({ pitchDecay: 0.2, octaves: 5, oscillator: { type: "square" }, envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.2 } }).connect(sfxVolumeNode);
+        
+        const bgmReverb = new Tone.Reverb(4).connect(musicVolumeNode);
+        const chordSynth = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "triangle" }, envelope: { attack: 1, decay: 1, sustain: 0.8, release: 2 } }).connect(bgmReverb);
+        const melodySynth = new Tone.Synth({ oscillator: { type: "sawtooth" }, envelope: { attack: 0.02, decay: 0.2, sustain: 0.1, release: 1 } }).connect(bgmReverb);
+        melodySynth.volume.value = -8;
+
+        const chordProgression = [ ["A2", "E3", "A3", "C4"], ["F2", "C3", "F3", "A3"], ["D2", "A2", "D3", "F3"], ["E2", "B2", "E3", "G#3"] ];
+        let chordIdx = 0;
+        const chordLoop = new Tone.Loop((time) => { chordSynth.triggerAttackRelease(chordProgression[chordIdx], "1m", time); chordIdx = (chordIdx + 1) % chordProgression.length; }, "1m");
+
+        const melodyNotes = [ "A4", "E5", "C5", "E5", "A4", "E5", "C5", "E5", "F4", "C5", "A4", "C5", "F4", "C5", "A4", "C5", "D4", "A4", "F4", "A4", "D4", "A4", "F4", "A4", "E4", "B4", "G#4", "B4", "E4", "B4", "G#4", "B4" ];
+        let melIdx = 0;
+        const melodyLoop = new Tone.Loop((time) => { melodySynth.triggerAttackRelease(melodyNotes[melIdx], "16n", time); melIdx = (melIdx + 1) % melodyNotes.length; }, "16n");
+
+        function playAudio(type) {
+            if (!audioInitialized) return;
+            if (type === 'click') synthClick.triggerAttackRelease("C5", "32n");
+            if (type === 'move') synthMove.triggerAttackRelease("G2", "8n");
+            if (type === 'impact') synthImpact.triggerAttackRelease("C1", "16n");
+            if (type === 'capture') synthCapture.triggerAttackRelease("8n");
+        }
+
+        window.openSettings = function() { document.getElementById('settings-modal').style.display = 'flex'; }
+        window.closeSettings = function() { document.getElementById('settings-modal').style.display = 'none'; }
+        window.updateMusicVolume = function(val) { if(val <= -60) musicVolumeNode.mute = true; else { musicVolumeNode.mute = false; musicVolumeNode.volume.value = val; } }
+        window.updateSFXVolume = function(val) { if(val <= -60) sfxVolumeNode.mute = true; else { sfxVolumeNode.mute = false; sfxVolumeNode.volume.value = val; } }
+
+        document.body.addEventListener('pointerdown', async () => {
+            if (!audioInitialized) { await Tone.start(); Tone.Transport.bpm.value = 110; Tone.Transport.start(); chordLoop.start(0); melodyLoop.start(0); audioInitialized = true; }
+        }, { once: true });
+
+
+        // === GAME STATE & THEMES ===
+        const PIECE_VALS = { 'p': 10, 'n': 30, 'b': 30, 'r': 50, 'q': 90, 'k': 900, 'assassin': 40, 'shield': 20 };
+        const EMOJI_MAP = { white: { 'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'assassin': '🗡️', 'shield': '🛡️' }, black: { 'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'assassin': '🗡️', 'shield': '🛡️' } };
+        
+        let boardLogics = Array(8).fill(null).map(() => Array(8).fill(null));
+        let phase = 'setup'; 
+        let turn = 'white';
+        let players = { white: 'player', black: 'bot_basic' }; // Dynamic selection
+        let points = { white: 0, black: 0 };
+        let activeShopItem = null;
+        let isAiThinking = false;
+        // Real-game position and move history lets Astra recognize repetition cycles.
+        let astraGameMoves = [];
+        let astraPositionCounts = new Map();
+        // Captured non-king pieces are stored by their original team for pawn promotion.
+        let capturedPieces = { white: [], black: [] };
+        
+        let selectedSquare = null; 
+        let validMovesCache = [];
+        const actionHistory = [];
+        let explosions = []; 
+        let hitAnimations = [];
+        
+        const THEMES = ['neon', 'black_neon', 'imperial_king'];
+        let themeIndex = 0;
+        let currentTheme = THEMES[themeIndex];
+
+        // === THREE.JS INITIALIZATION ===
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050510);
+        scene.fog = new THREE.FogExp2(0x050510, 0.02);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 12, 14); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.1; 
+
+        // === LIGHTING ===
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(10, 20, 10); dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        // === MATERIALS & COLORS ===
+        const matWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, metalness: 0.7 });
+        const matBlack = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.15, metalness: 0.8 });
+        const matSilver = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, metalness: 1.0, roughness: 0.15 });
+        const matGold = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 1.0, roughness: 0.2 }); 
+        
+        // Neon Glow Materials
+        const matNeonCyan = new THREE.MeshStandardMaterial({ color: 0x00f3ff, emissive: 0x00f3ff, emissiveIntensity: 1.5 });
+        const matNeonRed = new THREE.MeshStandardMaterial({ color: 0xff0055, emissive: 0xff0055, emissiveIntensity: 1.5 });
+        const matNeonBlue = new THREE.MeshStandardMaterial({ color: 0x168cff, emissive: 0x168cff, emissiveIntensity: 1.5 });
+        const matNeonPurple = new THREE.MeshStandardMaterial({ color: 0xaa00ff, emissive: 0xaa00ff, emissiveIntensity: 1.5 });
+        
+        // Imperial King Materials
+        const matImperialWhite = new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 1.0, roughness: 0.1, clearcoat: 1.0 });
+        const matImperialBlack = new THREE.MeshPhysicalMaterial({ color: 0xffaa00, metalness: 1.0, roughness: 0.2, clearcoat: 1.0 });
+        const matCrystalBlue = new THREE.MeshPhysicalMaterial({ color: 0x168cff, transmission: 0.9, opacity: 1, roughness: 0.1, ior: 1.5 });
+        const matCrystalPurple = new THREE.MeshPhysicalMaterial({ color: 0xaa00ff, transmission: 0.9, opacity: 1, roughness: 0.1, ior: 1.5 });
+        const matCrystalBoardLight = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transmission: 0.7, opacity: 1, metalness: 0.3, roughness: 0.05, clearcoat: 1.0 });
+        const matCrystalBoardDark = new THREE.MeshPhysicalMaterial({ color: 0x111111, transmission: 0.9, opacity: 1, metalness: 0.6, roughness: 0.1, clearcoat: 1.0 });
+
+        const matBoardGlass = new THREE.MeshPhysicalMaterial({ color: 0x1a1a24, metalness: 0.1, roughness: 0.1, transmission: 0.8, thickness: 0.5, clearcoat: 1.0 });
+        const matBoardDark = new THREE.MeshPhysicalMaterial({ color: 0x0a0a10, metalness: 0.2, roughness: 0.2, transmission: 0.6, thickness: 0.5 });
+        
+        let matHighlight = new THREE.MeshStandardMaterial({ color: 0x00f3ff, emissive: 0x00f3ff, emissiveIntensity: 0.5, transparent: true, opacity: 0.8 });
+        let matEnemyHighlight = new THREE.MeshStandardMaterial({ color: 0xff0055, emissive: 0xff0055, emissiveIntensity: 0.5, transparent: true, opacity: 0.8 });
+
+        // === 3D BOARD ===
+        const boardGroup = new THREE.Group();
+        scene.add(boardGroup);
+
+        const frameGeo = new THREE.BoxGeometry(8.8, 0.4, 8.8);
+        const frameMesh = new THREE.Mesh(frameGeo, new THREE.MeshStandardMaterial({ color: 0x333344, metalness: 0.8, roughness: 0.2 }));
+        frameMesh.position.y = -0.25; frameMesh.receiveShadow = true; boardGroup.add(frameMesh);
+
+        const imperialFrameGroup = new THREE.Group();
+        function createOrnamentTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 128; const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#111'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.font = 'bold 70px "Times New Roman", serif'; ctx.fillStyle = '#d4af37'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText("♔   以  兵  克  敵   ♔", canvas.width/2, canvas.height/2);
+            const tex = new THREE.CanvasTexture(canvas); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; return tex;
+        }
+        const matImperialFrame = new THREE.MeshStandardMaterial({ map: createOrnamentTexture(), metalness: 0.6, roughness: 0.3 });
+        const fRight = new THREE.Mesh(new THREE.BoxGeometry(2, 0.6, 9.6), matImperialFrame); fRight.position.set(5.5, -0.15, 0); fRight.receiveShadow = true;
+        const fLeft = new THREE.Mesh(new THREE.BoxGeometry(2, 0.6, 9.6), matImperialFrame); fLeft.position.set(-5.5, -0.15, 0); fLeft.receiveShadow = true;
+        const fTop = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.6, 0.6), new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.3 })); fTop.position.set(0, -0.15, -5.1);
+        const fBottom = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.6, 0.6), new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.3 })); fBottom.position.set(0, -0.15, 5.1);
+        imperialFrameGroup.add(fRight, fLeft, fTop, fBottom); imperialFrameGroup.visible = false; boardGroup.add(imperialFrameGroup);
+
+        const squares = [];
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const sqMesh = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.2, 0.96), (r + c) % 2 === 0 ? matBoardGlass : matBoardDark);
+                sqMesh.position.set(c - 3.5, 0, r - 3.5); sqMesh.receiveShadow = true;
+                sqMesh.userData = { r, c, isSquare: true, baseMaterial: sqMesh.material };
+                squares.push(sqMesh); boardGroup.add(sqMesh);
+            }
+        }
+
+        let edgeLights = new THREE.Group();
+        scene.add(edgeLights);
+        
+        function updateEdgeLightsTheme(colorEnemy, colorPlayer) {
+            // Remove old edge lights
+            while(edgeLights.children.length > 0) { 
+                const child = edgeLights.children[0];
+                edgeLights.remove(child); 
+                if(child.geometry) child.geometry.dispose();
+                if(child.material) child.material.dispose();
+            }
+            
+            const makeEdgeLight = (w, h, d, color, x, y, z) => {
+                const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 2.0, metalness: 0.25, roughness: 0.25 }));
+                bar.position.set(x, y, z); edgeLights.add(bar);
+                const glow = new THREE.PointLight(color, 0.65, 7); glow.position.set(x, y + 0.35, z); edgeLights.add(glow);
+            };
+            
+            makeEdgeLight(8.9, 0.045, 0.07, colorEnemy, 0, 0.02, -4.43);  // Top (Enemy side)
+            makeEdgeLight(8.9, 0.045, 0.07, colorPlayer, 0, 0.02, 4.43); // Bottom (Player side)
+            makeEdgeLight(0.07, 0.045, 8.9, 0xffffff, -4.43, 0.02, 0);   // Left
+            makeEdgeLight(0.07, 0.045, 8.9, 0xffffff, 4.43, 0.02, 0);    // Right
+        }
+        updateEdgeLightsTheme(0xff0055, 0x00f3ff); // Default Neon
+
+        // === EFFECTS ===
+        function spawnDisintegrationChunks(x, z, colorHex) {
+            const zones = [ { dx: 0.3, dy: 1.2, dz: 0.3 }, { dx: -0.3, dy: 0.3, dz: -0.3 }, { dx: -0.3, dy: 1.0, dz: 0.1 }, { dx: 0.3, dy: 0.4, dz: -0.2 }, { dx: 0.0, dy: 0.8, dz: 0.0 } ];
+            zones.sort(() => Math.random() - 0.5);
+            zones.forEach((zone, index) => { setTimeout(() => { spawnMiniBurst(x + zone.dx, zone.dy, z + zone.dz, colorHex); }, index * 60); });
+        }
+
+        function spawnMiniBurst(x, y, z, colorHex) {
+            const particleCount = 200; const geo = new THREE.BufferGeometry();
+            const pos = new Float32Array(particleCount * 3); const vels = new Float32Array(particleCount * 3);
+            for(let i=0; i<particleCount; i++) {
+                const r = Math.random() * 0.25; const theta = Math.random() * Math.PI * 2; const phi = Math.random() * Math.PI;
+                pos[i*3] = x + r * Math.sin(phi) * Math.cos(theta); pos[i*3+1] = y + r * Math.cos(phi); pos[i*3+2] = z + r * Math.sin(phi) * Math.sin(theta);
+                vels[i*3] = (Math.random() - 0.5) * 0.06; vels[i*3+1] = 0.02 + Math.random() * 0.08; vels[i*3+2] = (Math.random() - 0.5) * 0.06;
+            }
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('velocity', new THREE.BufferAttribute(vels, 3));
+            const mat = new THREE.PointsMaterial({ color: colorHex, size: 0.08, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending, depthWrite: false });
+            const points = new THREE.Points(geo, mat); scene.add(points); explosions.push(points);
+        }
+
+        function triggerHitAnimation(targetMesh, colorHex, onComplete) {
+            const glowMat = new THREE.MeshStandardMaterial({ color: colorHex, emissive: colorHex, emissiveIntensity: 3.0, transparent: true, opacity: 1.0 });
+            const light = new THREE.PointLight(colorHex, 2, 5); light.position.copy(targetMesh.position); light.position.y += 0.5; scene.add(light);
+            targetMesh.traverse((child) => { if (child.isMesh && child.material) child.material = glowMat; });
+            hitAnimations.push({ mesh: targetMesh, light: light, startX: targetMesh.position.x, startZ: targetMesh.position.z, startTime: performance.now(), duration: 500, colorHex: colorHex, onComplete: onComplete });
+        }
+
+        function cleanupTargetMesh(mesh) {
+            scene.remove(mesh);
+            mesh.children.forEach(child => { if(child.isPoints) { const idx = auras.indexOf(child); if(idx > -1) auras.splice(idx, 1); } });
+            mesh.traverse(c => { if(c.geometry) c.geometry.dispose(); if(c.material) { if(Array.isArray(c.material)) c.material.forEach(m => m.dispose()); else c.material.dispose(); } });
+        }
+
+        // === 3D PIECES ===
+        function createSolidMesh(geo, color, customMat = null) {
+            let mat = customMat;
+            if (!mat) { 
+                if (currentTheme === 'neon') {
+                    mat = (color === 'white') ? matWhite : matBlack;
+                } else if (currentTheme === 'black_neon') {
+                    mat = matBlack; // Keduanya gelap, hanya neon yang membedakan!
+                } else {
+                    mat = (color === 'white') ? matSilver : matGold;
+                }
+            }
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.isBaseMesh = true;
+            return mesh;
+        }
+
+        const auras = []; 
+        function createPiece3D(type, color) {
+            if (currentTheme === 'imperial_king') return createImperialPiece(type, color);
+            return createStandardPiece(type, color);
+        }
+
+        function createStandardPiece(type, color) {
+            const group = new THREE.Group();
+            const base = createSolidMesh(new THREE.CylinderGeometry(0.35, 0.45, 0.15, 32), color); base.position.y = 0.075; group.add(base);
+            
+            const glowMat = currentTheme === 'neon' ? (color === 'white' ? matNeonCyan : matNeonRed) : (color === 'white' ? matNeonBlue : matNeonPurple);
+            const neonRing = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.03, 16, 32), glowMat); neonRing.rotation.x = Math.PI / 2; neonRing.position.y = 0.2; group.add(neonRing);
+
+            let body, top;
+            switch(type) {
+                case 'p': body = createSolidMesh(new THREE.CylinderGeometry(0.15, 0.3, 0.7, 32), color); body.position.y = 0.55; top = createSolidMesh(new THREE.SphereGeometry(0.2, 32, 32), color); top.position.y = 1.0; group.add(body, top); break;
+                case 'r': body = createSolidMesh(new THREE.CylinderGeometry(0.25, 0.3, 0.7, 32), color); body.position.y = 0.55; top = createSolidMesh(new THREE.CylinderGeometry(0.3, 0.25, 0.25, 16), color); top.position.y = 1.0; group.add(body, top); break;
+                case 'n': body = createSolidMesh(new THREE.CylinderGeometry(0.2, 0.3, 0.6, 32), color); body.position.y = 0.5; top = createSolidMesh(new THREE.BoxGeometry(0.25, 0.5, 0.6), color); top.rotation.x = Math.PI / 6; top.position.set(0, 0.9, 0.1); group.add(body, top); if(color === 'white') group.rotation.y = Math.PI; break;
+                case 'b': body = createSolidMesh(new THREE.CylinderGeometry(0.15, 0.3, 0.8, 32), color); body.position.y = 0.6; top = createSolidMesh(new THREE.SphereGeometry(0.18, 32, 32), color); top.scale.y = 1.5; top.position.y = 1.15; const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), glowMat); dot.position.y = 1.45; group.add(body, top, dot); break;
+                case 'q': body = createSolidMesh(new THREE.CylinderGeometry(0.18, 0.3, 1.0, 32), color); body.position.y = 0.7; top = createSolidMesh(new THREE.TorusGeometry(0.15, 0.08, 16, 32), color); top.rotation.x = Math.PI / 2; top.position.y = 1.25; const qCore = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16), glowMat); qCore.position.y = 1.25; group.add(body, top, qCore); break;
+                case 'k': body = createSolidMesh(new THREE.CylinderGeometry(0.2, 0.35, 1.1, 32), color); body.position.y = 0.75; const cV = createSolidMesh(new THREE.BoxGeometry(0.08, 0.35, 0.08), color); const cH = createSolidMesh(new THREE.BoxGeometry(0.25, 0.08, 0.08), color); cV.position.y = 1.45; cH.position.y = 1.45; const kCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.06), glowMat); kCore.position.y = 1.45; group.add(body, cV, cH, kCore); break;
+                case 'assassin': body = createSolidMesh(new THREE.ConeGeometry(0.2, 1.3, 16), color); body.position.y = 0.85; const edge = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5, 4), glowMat); edge.position.y = 1.25; group.add(body, edge); break;
+                case 'shield': body = createSolidMesh(new THREE.CylinderGeometry(0.35, 0.35, 0.5, 32), color); body.position.y = 0.45; const dome = createSolidMesh(new THREE.SphereGeometry(0.35, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), color); dome.position.y = 0.7; const sCore = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.05, 16, 32), glowMat); sCore.rotation.x = Math.PI / 2; sCore.position.y = 0.75; group.add(body, dome, sCore); break;
+            }
+
+            const ptColor = currentTheme === 'neon' ? (color === 'white' ? 0x00f3ff : 0xff0055) : (color === 'white' ? 0x168cff : 0xaa00ff);
+            const ptPos = new Float32Array(40 * 3);
+            for(let i=0; i<40; i++){ const r = Math.random() * 0.4; const theta = Math.random() * Math.PI * 2; ptPos[i*3] = r * Math.cos(theta); ptPos[i*3+1] = Math.random() * 2; ptPos[i*3+2] = r * Math.sin(theta); }
+            const ptGeo = new THREE.BufferGeometry(); ptGeo.setAttribute('position', new THREE.BufferAttribute(ptPos, 3));
+            const auraPts = new THREE.Points(ptGeo, new THREE.PointsMaterial({ color: ptColor, size: 0.05, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false })); group.add(auraPts); auras.push(auraPts); 
+            return group;
+        }
+
+        function createImperialPiece(type, color) {
+            const group = new THREE.Group();
+            const matMetal = color === 'white' ? matImperialWhite : matImperialBlack;
+            const matCrystal = color === 'white' ? matCrystalBlue : matCrystalPurple;
+
+            const base = createSolidMesh(new THREE.CylinderGeometry(0.35, 0.45, 0.15, 32), color, matMetal); base.position.y = 0.075; group.add(base);
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.04, 16, 32), matCrystal); ring.rotation.x = Math.PI/2; ring.position.y = 0.2; group.add(ring);
+
+            let body, top, extra;
+            switch(type) {
+                case 'p': body = createSolidMesh(new THREE.ConeGeometry(0.2, 0.6, 32), color, matMetal); body.position.y = 0.5; top = createSolidMesh(new THREE.SphereGeometry(0.18, 32, 32), color, matCrystal); top.position.y = 0.9; group.add(body, top); break;
+                case 'r': body = createSolidMesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), color, matMetal); body.position.y = 0.4; top = createSolidMesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), color, matCrystal); top.position.y = 0.8; const w1 = createSolidMesh(new THREE.CylinderGeometry(0.2, 0.2, 0.6, 16), color, matMetal); w1.rotation.z = Math.PI/2; w1.position.y = 0.3; group.add(body, top, w1); break;
+                case 'n': body = createSolidMesh(new THREE.CylinderGeometry(0.2, 0.3, 0.6, 16), color, matMetal); body.rotation.x = -Math.PI/6; body.position.set(0, 0.5, 0.1); top = createSolidMesh(new THREE.BoxGeometry(0.25, 0.4, 0.4), color, matMetal); top.position.set(0, 0.8, -0.1); extra = createSolidMesh(new THREE.ConeGeometry(0.1, 0.2, 4), color, matCrystal); extra.position.set(0, 1.05, -0.1); group.add(body, top, extra); if(color === 'white') group.rotation.y = Math.PI; break;
+                case 'b': body = createSolidMesh(new THREE.CylinderGeometry(0.15, 0.3, 0.8, 32), color, matMetal); body.position.y = 0.6; top = createSolidMesh(new THREE.ConeGeometry(0.25, 0.4, 32), color, matMetal); top.position.y = 1.2; extra = createSolidMesh(new THREE.SphereGeometry(0.1, 16, 16), color, matCrystal); extra.position.y = 1.45; group.add(body, top, extra); break;
+                case 'q': body = createSolidMesh(new THREE.CylinderGeometry(0.15, 0.3, 0.9, 32), color, matMetal); body.position.y = 0.6; const dress = createSolidMesh(new THREE.TorusGeometry(0.25, 0.1, 16, 32), color, matMetal); dress.rotation.x = Math.PI/2; dress.position.y = 0.5; top = createSolidMesh(new THREE.SphereGeometry(0.2, 32, 32), color, matCrystal); top.position.y = 1.2; extra = createSolidMesh(new THREE.TorusGeometry(0.15, 0.05, 16, 16), color, matMetal); extra.rotation.x = Math.PI/2; extra.position.y = 1.35; group.add(body, dress, top, extra); break;
+                case 'k': body = createSolidMesh(new THREE.CylinderGeometry(0.25, 0.4, 1.0, 32), color, matMetal); body.position.y = 0.7; const cape = createSolidMesh(new THREE.BoxGeometry(0.5, 0.8, 0.1), color, matMetal); cape.position.set(0, 0.6, -0.25); cape.rotation.x = -0.2; top = createSolidMesh(new THREE.ConeGeometry(0.3, 0.5, 8), color, matCrystal); top.position.y = 1.45; group.add(body, cape, top); break;
+                case 'assassin': body = createSolidMesh(new THREE.CylinderGeometry(0.1, 0.3, 1.0, 4), color, matMetal); body.position.y = 0.7; top = createSolidMesh(new THREE.ConeGeometry(0.15, 0.6, 4), color, matCrystal); top.position.y = 1.4; group.add(body, top); break;
+                case 'shield': body = createSolidMesh(new THREE.CylinderGeometry(0.4, 0.4, 0.2, 32), color, matMetal); body.position.y = 0.3; top = createSolidMesh(new THREE.SphereGeometry(0.4, 32, 16, 0, Math.PI*2, 0, Math.PI/2), color, matCrystal); top.position.y = 0.4; group.add(body, top); break;
+            }
+
+            const ptColor = color === 'white' ? 0x168cff : 0xaa00ff;
+            const ptPos = new Float32Array(30 * 3);
+            for(let i=0; i<30; i++){ const r = Math.random() * 0.4; const theta = Math.random() * Math.PI * 2; ptPos[i*3] = r * Math.cos(theta); ptPos[i*3+1] = Math.random() * 2; ptPos[i*3+2] = r * Math.sin(theta); }
+            const ptGeo = new THREE.BufferGeometry(); ptGeo.setAttribute('position', new THREE.BufferAttribute(ptPos, 3));
+            const auraPts = new THREE.Points(ptGeo, new THREE.PointsMaterial({ color: ptColor, size: 0.05, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })); group.add(auraPts); auras.push(auraPts);
+            return group;
+        }
+
+        // === DRAG VS CLICK ===
+        const raycaster = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+        let pointerDownPos = { x: 0, y: 0 }, pointerDownTime = 0;
+        let isAnimatingMove = false; 
+
+        renderer.domElement.addEventListener('pointerdown', (e) => { pointerDownPos.x = e.clientX; pointerDownPos.y = e.clientY; pointerDownTime = Date.now(); });
+        renderer.domElement.addEventListener('pointerup', (e) => {
+            if(isAiThinking || isAnimatingMove) return;
+            const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y); const time = Date.now() - pointerDownTime;
+            if (dist > 15 || time > 400 || e.button !== 0) return; 
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(scene.children, true);
+            let target = null;
+            for (let i = 0; i < intersects.length; i++) {
+                let obj = intersects[i].object;
+                while(obj.parent && obj.parent !== scene) { if(obj.userData.isPiece || obj.userData.isSquare) break; obj = obj.parent; }
+                if (obj.userData.isPiece || obj.userData.isSquare) { target = { r: obj.userData.r, c: obj.userData.c }; break; }
+            }
+            if (target) handleGridClick(target.r, target.c);
+        });
+
+        // === LOGIC CORE ===
+        function initBoard() {
+            const layout = [
+                ['r','n','b','q','k','b','n','r'], ['p','p','p','p','p','p','p','p'], [null,null,null,null,null,null,null,null], [null,null,null,null,null,null,null,null],
+                [null,null,null,null,null,null,null,null], [null,null,null,null,null,null,null,null], ['p','p','p','p','p','p','p','p'], ['r','n','b','q','k','b','n','r']
+            ];
+            for (let r = 0; r < 8; r++) { for (let c = 0; c < 8; c++) { if (layout[r][c]) addPiece(r, c, layout[r][c], r < 2 ? 'black' : 'white'); } }
+            updateUI(); setTimeout(() => { const loader = document.getElementById('loading'); if(loader) { loader.style.opacity = '0'; setTimeout(() => loader.remove(), 500); } }, 500);
+        }
+
+        function addPiece(r, c, type, color) {
+            const meshGroup = createPiece3D(type, color); meshGroup.position.set(c - 3.5, 0.1, r - 3.5); meshGroup.userData = { r, c, isPiece: true, type, color }; 
+            scene.add(meshGroup); boardLogics[r][c] = { type, color, mesh: meshGroup };
+        }
+
+        function handleGridClick(r, c) {
+            if(isAiThinking || isAnimatingMove) return;
+            const pieceHere = boardLogics[r][c];
+
+            if (phase === 'setup') {
+                playAudio('click');
+                if (pieceHere && pieceHere.type !== 'k') {
+                    saveSnapshot(); points[pieceHere.color] += PIECE_VALS[pieceHere.type]; cleanupTargetMesh(pieceHere.mesh); boardLogics[r][c] = null; updateUI();
+                } else if (!pieceHere && activeShopItem) {
+                    const targetColor = r >= 4 ? 'white' : 'black'; const cost = PIECE_VALS[activeShopItem];
+                    if (points[targetColor] >= cost) { saveSnapshot(); points[targetColor] -= cost; addPiece(r, c, activeShopItem, targetColor); updateUI(); }
+                }
+            } else if (phase === 'play') {
+                const moveObj = validMovesCache.find(m => m.r === r && m.c === c);
+                if (selectedSquare && moveObj) { executeMove(selectedSquare.r, selectedSquare.c, r, c); return; }
+                
+                if (pieceHere && pieceHere.color === turn && players[turn] === 'player') { 
+                    playAudio('click'); selectedSquare = { r, c }; validMovesCache = generateMoves(r, c, pieceHere, boardLogics); highlightSquares();
+                } else { selectedSquare = null; validMovesCache = []; highlightSquares(); }
+            }
+        }
+
+        function executeMove(fromR, fromC, toR, toC) {
+            const piece = boardLogics[fromR][fromC]; if (!piece) return;
+            saveSnapshot();
+            const target = boardLogics[toR][toC];
+
+            boardLogics[toR][toC] = piece; boardLogics[fromR][fromC] = null;
+            piece.mesh.userData.r = toR; piece.mesh.userData.c = toC;
+            astraRecordRealMove({ fromR, fromC, toR, toC, color: piece.color, type: piece.type }, boardLogics, piece.color === 'white' ? 'black' : 'white');
+
+            selectedSquare = null; validMovesCache = []; highlightSquares();
+            if (target) playAudio('impact'); else playAudio('move');
+
+            // Captured pieces return to their original team's reserve. Kings are never promotable.
+            if (target && target.type !== 'k') capturedPieces[target.color].push(target.type);
+
+            const afterMove = () => {
+                const continueTurn = () => finishTurn();
+                if (piece.type === 'p' && ((piece.color === 'white' && toR === 0) || (piece.color === 'black' && toR === 7))) {
+                    handlePawnPromotion(piece, toR, toC, continueTurn);
+                } else {
+                    continueTurn();
+                }
+            };
+
+            animatePieceMove(piece.mesh, toR, toC, () => {
+                if (target) {
+                    const ptColor = currentTheme === 'neon' ? (target.color === 'white' ? 0x00f3ff : 0xff0055) : (target.color === 'white' ? 0x168cff : 0xaa00ff);
+                    triggerHitAnimation(target.mesh, ptColor, () => {
+                        playAudio('capture'); spawnDisintegrationChunks(target.mesh.position.x, target.mesh.position.z, ptColor); cleanupTargetMesh(target.mesh);
+                        if (target.type === 'k') { showGameOver(piece.color); return; }
+                        afterMove();
+                    });
+                } else { afterMove(); }
+            });
+        }
+
+        const PROMOTION_LABELS = { q: 'RATU', r: 'BENTENG', b: 'GAJAH', n: 'KUDA', assassin: 'ASSASSIN', shield: 'SHIELD' };
+        function chooseAIPromotion(color) {
+            const reserve = capturedPieces[color] || [];
+            if (!reserve.length) return null;
+            // Strongest available captured unit is the default choice for all three bots.
+            return reserve.slice().sort((a, b) => (PIECE_VALS[b] || 0) - (PIECE_VALS[a] || 0))[0];
+        }
+
+        function handlePawnPromotion(pawn, row, col, done) {
+            const reserve = capturedPieces[pawn.color] || [];
+            if (!reserve.length) { done(); return; }
+
+            const available = [...new Set(reserve)];
+            if (players[pawn.color] !== 'player') {
+                const chosen = chooseAIPromotion(pawn.color);
+                if (chosen) applyPawnPromotion(pawn, row, col, chosen);
+                done();
+                return;
+            }
+
+            const modal = document.getElementById('promotion-modal');
+            const options = document.getElementById('promotion-options');
+            document.getElementById('promotion-message').innerText =
+                `Pilih bidak ${pawn.color === 'white' ? 'WHITE' : 'BLACK'} yang pernah tertangkap.`;
+            options.innerHTML = '';
+            available.forEach(type => {
+                const btn = document.createElement('button');
+                btn.className = 'rounded-lg border border-[#00f3ff]/50 bg-white/5 p-3 text-xs font-bold text-white hover:bg-[#00f3ff]/20';
+                btn.innerText = `${PROMOTION_LABELS[type] || type.toUpperCase()}  •  ${EMOJI_MAP[pawn.color][type] || ''}`;
+                btn.onclick = () => {
+                    applyPawnPromotion(pawn, row, col, type);
+                    modal.classList.add('hidden'); modal.classList.remove('flex');
+                    done();
+                };
+                options.appendChild(btn);
+            });
+            modal.classList.remove('hidden'); modal.classList.add('flex');
+        }
+
+        function applyPawnPromotion(pawn, row, col, newType) {
+            const index = capturedPieces[pawn.color].indexOf(newType);
+            if (index >= 0) capturedPieces[pawn.color].splice(index, 1);
+            const oldMesh = pawn.mesh;
+            const newMesh = createPiece3D(newType, pawn.color);
+            newMesh.position.copy(oldMesh.position);
+            newMesh.userData = { r: row, c: col, isPiece: true, type: newType, color: pawn.color };
+            scene.add(newMesh);
+            cleanupTargetMesh(oldMesh);
+            boardLogics[row][col] = { type: newType, color: pawn.color, mesh: newMesh };
+            playAudio('click');
+            updateMinimap();
+        }
+
+        function finishTurn() {
+            turn = turn === 'white' ? 'black' : 'white';
+            updateUI();
+            
+            if (phase === 'play' && players[turn] !== 'player') {
+                isAiThinking = true;
+                const aiEl = document.getElementById('ai-thinking');
+                aiEl.classList.remove('hidden');
+                
+                let botName = players[turn] === 'bot_astra' ? 'AI CHAT GPT ASTRA 6.1' : (players[turn] === 'bot_gemini' ? 'AI GEMINI PRO 4.1' : 'BOT (BASIC)');
+                let aiColorText = currentTheme === 'neon' ? turn.toUpperCase() : (turn === 'white' ? 'BLUE' : 'PURPLE');
+                if (currentTheme === 'imperial_king') aiColorText = turn === 'white' ? 'SILVER' : 'GOLD';
+                
+                aiEl.innerText = `${botName} [${aiColorText}] COMPUTING...`;
+                aiEl.style.color = currentTheme === 'neon' ? (turn==='white'?'#00f3ff':'#ff0055') : (turn==='white'?'#168cff':'#aa00ff');
+                aiEl.style.borderColor = aiEl.style.color;
+                
+                setTimeout(() => {
+                    if (players[turn] === 'bot_astra') playAstra61(turn);
+                    else if (players[turn] === 'bot_gemini') playAIGemini(turn);
+                    else playAITurn(turn); // Basic Bot
+                }, 500);
+            }
+        }
+
+        function animatePieceMove(mesh, toR, toC, callback) {
+            isAnimatingMove = true;
+            const targetX = toC - 3.5; const targetZ = toR - 3.5; const startX = mesh.position.x; const startZ = mesh.position.z;
+            let frame = 0; const maxFrames = 15;
+            function step() {
+                frame++; const t = frame / maxFrames;
+                mesh.position.x = startX + (targetX - startX) * t; mesh.position.z = startZ + (targetZ - startZ) * t; mesh.position.y = 0.1 + Math.sin(t * Math.PI) * 0.5; 
+                if(frame < maxFrames) { requestAnimationFrame(step); } else { mesh.position.set(targetX, 0.1, targetZ); isAnimatingMove = false; if(callback) callback(); }
+            }
+            step();
+        }
+
+        function generateMoves(r, c, piece, boardData) {
+            let moves = []; const col = piece.color; const enm = col === 'white' ? 'black' : 'white';
+            const add = (nr, nc) => {
+                if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+                    const tgt = boardData[nr][nc];
+                    if (!tgt) { moves.push({ r: nr, c: nc, cap: false }); return true; } 
+                    else if (tgt.color === enm) { moves.push({ r: nr, c: nc, cap: true, tgtType: tgt.type }); return false; }
+                    return false;
+                } return false;
+            };
+            const slide = (dirs, max = 8) => { for (let [dr, dc] of dirs) { for (let s = 1; s <= max; s++) { if (!add(r + dr*s, c + dc*s)) break; } } };
+            const orth = [[-1,0], [1,0], [0,-1], [0,1]]; const diag = [[-1,-1], [-1,1], [1,-1], [1,1]]; const omni = [...orth, ...diag];
+
+            switch(piece.type) {
+                case 'p':
+                    const dir = col === 'white' ? -1 : 1; const startR = col === 'white' ? 6 : 1;
+                    if (r+dir >= 0 && r+dir < 8 && !boardData[r+dir][c]) { moves.push({r: r+dir, c: c, cap: false}); if (r === startR && !boardData[r+dir*2][c]) moves.push({r: r+dir*2, c: c, cap: false}); }
+                    if (r+dir >= 0 && r+dir < 8) {
+                        if (c-1 >= 0 && boardData[r+dir][c-1]?.color === enm) moves.push({r: r+dir, c: c-1, cap: true, tgtType: boardData[r+dir][c-1].type});
+                        if (c+1 < 8 && boardData[r+dir][c+1]?.color === enm) moves.push({r: r+dir, c: c+1, cap: true, tgtType: boardData[r+dir][c+1].type});
+                    } break;
+                case 'r': slide(orth); break; case 'b': slide(diag); break; case 'q': slide(omni); break; case 'k': omni.forEach(([dr, dc]) => add(r+dr, c+dc)); break;
+                case 'n': [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr, dc]) => add(r+dr, c+dc)); break;
+                case 'assassin': [[-3,0],[3,0],[0,-3],[0,3],[-3,-3],[-3,3],[3,-3],[3,3]].forEach(([dr, dc]) => add(r+dr, c+dc)); break;
+                case 'shield': omni.forEach(([dr, dc]) => add(r+dr, c+dc)); break;
+            } return moves;
+        }
+
+        // === AI ENGINE: BASIC ===
+        function playAITurn(aiColor) {
+            let aiMoves = [];
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const piece = boardLogics[r][c];
+                    if (piece && piece.color === aiColor) {
+                        const mvs = generateMoves(r, c, piece, boardLogics);
+                        mvs.forEach(m => {
+                            let score = 0;
+                            if (m.cap) {
+                                score += PIECE_VALS[m.tgtType] * 10;
+                                if (m.tgtType === 'k') score += 1000000;
+                                else if (m.tgtType === 'q') score += 100000;
+                            }
+                            if(aiColor === 'black') score += (m.r - r) * 1; else score += (r - m.r) * 1;
+                            score += Math.random() * 5; aiMoves.push({ fromR: r, fromC: c, toR: m.r, toC: m.c, score });
+                        });
+                    }
+                }
+            }
+            if (aiMoves.length > 0) {
+                aiMoves.sort((a, b) => b.score - a.score);
+                executeMove(aiMoves[0].fromR, aiMoves[0].fromC, aiMoves[0].toR, aiMoves[0].toC);
+            }
+            isAiThinking = false; document.getElementById('ai-thinking').classList.add('hidden');
+        }
+
+        // === AI ENGINE: GEMINI PRO 4.1 (MINIMAX ALPHA-BETA) ===
+        function cloneLogicBoard(b) { return b.map(row => row.map(p => p ? {type: p.type, color: p.color} : null)); }
+        
+        function getAllMovesList(boardData, color) {
+            let all = [];
+            for(let r=0; r<8; r++) {
+                for(let c=0; c<8; c++) {
+                    const p = boardData[r][c];
+                    if(p && p.color === color) {
+                        let mvs = generateMoves(r, c, p, boardData);
+                        mvs.forEach(m => all.push({ fromR: r, fromC: c, toR: m.r, toC: m.c, cap: m.cap, tgtType: m.tgtType }));
+                    }
+                }
+            }
+            return all;
+        }
+
+        function evaluateBoardState(boardData, myColor) {
+            let score = 0; let myKing = false; let oppKing = false;
+            for(let r=0; r<8; r++) {
+                for(let c=0; c<8; c++) {
+                    const p = boardData[r][c];
+                    if(p) {
+                        if(p.type === 'k') { if(p.color === myColor) myKing = true; else oppKing = true; }
+                        let val = PIECE_VALS[p.type] * 10;
+                        if(p.type !== 'k') { val -= (Math.abs(3.5 - r) + Math.abs(3.5 - c)) * 1.5; }
+                        if(p.type === 'p') { if(p.color === 'white') val += (6-r)*3; else val += (r-1)*3; }
+                        
+                        if(p.color === myColor) score += val; else score -= val;
+                    }
+                }
+            }
+            if(!myKing) return -999999;
+            if(!oppKing) return 999999;
+            return score;
+        }
+
+        function minimax(boardData, depth, alpha, beta, isMaximizing, myColor) {
+            if(depth === 0) return evaluateBoardState(boardData, myColor);
+            const currColor = isMaximizing ? myColor : (myColor === 'white' ? 'black' : 'white');
+            let moves = getAllMovesList(boardData, currColor);
+            if(moves.length === 0) return isMaximizing ? -99999 : 99999;
+            
+            // Heuristic sorting: Captures first for faster alpha-beta pruning
+            moves.sort((a, b) => (b.cap ? 1 : 0) - (a.cap ? 1 : 0));
+
+            if(isMaximizing) {
+                let maxEval = -Infinity;
+                for(let m of moves) {
+                    let cap = boardData[m.toR][m.toC];
+                    boardData[m.toR][m.toC] = boardData[m.fromR][m.fromC]; boardData[m.fromR][m.fromC] = null;
+                    let ev = minimax(boardData, depth-1, alpha, beta, false, myColor);
+                    boardData[m.fromR][m.fromC] = boardData[m.toR][m.toC]; boardData[m.toR][m.toC] = cap;
+                    maxEval = Math.max(maxEval, ev); alpha = Math.max(alpha, ev);
+                    if(beta <= alpha) break;
+                } return maxEval;
+            } else {
+                let minEval = Infinity;
+                for(let m of moves) {
+                    let cap = boardData[m.toR][m.toC];
+                    boardData[m.toR][m.toC] = boardData[m.fromR][m.fromC]; boardData[m.fromR][m.fromC] = null;
+                    let ev = minimax(boardData, depth-1, alpha, beta, true, myColor);
+                    boardData[m.fromR][m.fromC] = boardData[m.toR][m.toC]; boardData[m.toR][m.toC] = cap;
+                    minEval = Math.min(minEval, ev); beta = Math.min(beta, ev);
+                    if(beta <= alpha) break;
+                } return minEval;
+            }
+        }
+
+        function playAIGemini(aiColor) {
+            let bestMove = null; let bestScore = -Infinity;
+            const simBoard = cloneLogicBoard(boardLogics);
+            const moves = getAllMovesList(simBoard, aiColor);
+            moves.sort((a, b) => (b.cap ? 1 : 0) - (a.cap ? 1 : 0));
+
+            for (const m of moves) {
+                const captured = simBoard[m.toR][m.toC];
+                simBoard[m.toR][m.toC] = simBoard[m.fromR][m.fromC];
+                simBoard[m.fromR][m.fromC] = null;
+                const score = minimax(simBoard, 2, -Infinity, Infinity, false, aiColor) + Math.random() * 0.01;
+                simBoard[m.fromR][m.fromC] = simBoard[m.toR][m.toC];
+                simBoard[m.toR][m.toC] = captured;
+                if (score > bestScore) { bestScore = score; bestMove = m; }
+            }
+
+            document.getElementById('ai-thinking').classList.add('hidden');
+            isAiThinking = false;
+            if (bestMove) executeMove(bestMove.fromR, bestMove.fromC, bestMove.toR, bestMove.toC);
+        }
+
+        // ============================================================
+        // CHAT GPT ASTRA 6.1 - ADVANCED LOCAL CHESS DECISION ENGINE
+        // Shared promotion rule: Basic, Gemini, and Astra all use executeMove().
+        // When a pawn reaches the last rank, its bot automatically promotes it
+        // to the strongest piece of its own color currently in the captured reserve.
+        // This is an offline game AI, not a connection to ChatGPT servers.
+        // Features: iterative-depth search, alpha-beta pruning, move ordering,
+        // transposition cache, positional evaluation, threat detection,
+        // custom-unit valuation and tactical extensions.
+        // ============================================================
+        function astraPositionKey(board, side) {
+            let key = side + '|';
+            for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+                const p = board[r][c]; key += p ? `${p.color[0]}${p.type}@${r}${c};` : '--;';
+            }
+            return key;
+        }
+
+        function astraRecordPosition(board, side) {
+            const key = astraPositionKey(board, side);
+            astraPositionCounts.set(key, (astraPositionCounts.get(key) || 0) + 1);
+            return key;
+        }
+
+        function astraRecordRealMove(move, board, nextSide) {
+            const key = astraRecordPosition(board, nextSide);
+            astraGameMoves.push({ ...move, positionKey: key });
+            if (astraGameMoves.length > 100) {
+                astraGameMoves.shift(); astraRebuildPositionCounts();
+            }
+        }
+
+        function astraRebuildPositionCounts() {
+            astraPositionCounts = new Map();
+            // The first position is reconstructed from the earliest snapshot only when available;
+            // recorded destination positions remain sufficient to detect recurring cycles.
+            for (const move of astraGameMoves) {
+                if (move.positionKey) astraPositionCounts.set(move.positionKey, (astraPositionCounts.get(move.positionKey) || 0) + 1);
+            }
+        }
+
+        function astraRepetitionPenalty(move, resultingBoard, nextSide) {
+            const key = astraPositionKey(resultingBoard, nextSide);
+            const repeats = astraPositionCounts.get(key) || 0;
+            let penalty = repeats ? (repeats === 1 ? 1800 : 9000 + repeats * 2500) : 0;
+
+            // Penalize moving the same piece straight back to its previous square.
+            const recent = astraGameMoves.slice(-8);
+            const reverse = recent.some(h => h.color === move.color && h.type === move.type &&
+                h.fromR === move.toR && h.fromC === move.toC && h.toR === move.fromR && h.toC === move.fromC);
+            if (reverse) penalty += 2200;
+
+            // Detect short A-B-A-B shuffling patterns, especially king/rook oscillation.
+            const samePieceRecent = recent.filter(h => h.color === move.color && h.type === move.type);
+            if (samePieceRecent.length >= 2) {
+                const last = samePieceRecent[samePieceRecent.length - 1];
+                const prior = samePieceRecent[samePieceRecent.length - 2];
+                if (last.fromR === prior.toR && last.fromC === prior.toC &&
+                    last.toR === prior.fromR && last.toC === prior.fromC &&
+                    move.fromR === last.toR && move.fromC === last.toC &&
+                    move.toR === last.fromR && move.toC === last.fromC) penalty += 6500;
+            }
+            return penalty;
+        }
+
+        const ASTRA61 = {
+            name: "AI CHAT GPT ASTRA 6.1",
+            maxDepth: 3,
+            table: new Map(),
+            nodes: 0,
+            startedAt: 0,
+            pieceSquare: {
+                p: 1.0, n: 1.0, b: 0.7, r: 0.25, q: 0.15, k: 0.0,
+                assassin: 0.8, shield: 0.55
+            }
+        };
+
+        function astraOpponent(color) { return color === 'white' ? 'black' : 'white'; }
+
+        function astraBoardKey(board, side, depth) {
+            let key = side + ':' + depth + ':';
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const p = board[r][c];
+                    key += p ? (p.color[0] + p.type + r + c + ';') : '..;';
+                }
+            }
+            return key;
+        }
+
+        function astraApply(board, move) {
+            const captured = board[move.toR][move.toC];
+            const moving = board[move.fromR][move.fromC];
+            board[move.toR][move.toC] = moving;
+            board[move.fromR][move.fromC] = null;
+            return captured;
+        }
+
+        function astraUndo(board, move, captured) {
+            board[move.fromR][move.fromC] = board[move.toR][move.toC];
+            board[move.toR][move.toC] = captured;
+        }
+
+        function astraPieceValue(piece) {
+            if (!piece) return 0;
+            const values = { p: 100, n: 315, b: 330, r: 510, q: 930, k: 20000, assassin: 390, shield: 260 };
+            return values[piece.type] || 100;
+        }
+
+        function astraEvaluate(board, perspective) {
+            let score = 0;
+            let ownKing = false, enemyKing = false;
+            let ownMobility = 0, enemyMobility = 0;
+            const enemy = astraOpponent(perspective);
+
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const p = board[r][c];
+                    if (!p) continue;
+                    if (p.type === 'k') {
+                        if (p.color === perspective) ownKing = true;
+                        else enemyKing = true;
+                    }
+
+                    const sign = p.color === perspective ? 1 : -1;
+                    const value = astraPieceValue(p);
+                    const centerDistance = Math.abs(3.5 - r) + Math.abs(3.5 - c);
+                    const centerBonus = Math.max(0, 7 - centerDistance) * 2.2;
+                    let advancement = 0;
+
+                    if (p.type === 'p') advancement = (p.color === 'white' ? 6 - r : r - 1) * 7;
+                    if (p.type === 'assassin') advancement = (p.color === 'white' ? 6 - r : r - 1) * 2;
+                    if (p.type === 'n' || p.type === 'b' || p.type === 'shield') advancement += centerBonus;
+                    if (p.type === 'q') advancement += centerBonus * 0.45;
+
+                    // Slightly reward developed pieces and central control.
+                    score += sign * (value + advancement);
+
+                    const mobility = generateMoves(r, c, p, board).length;
+                    if (p.color === perspective) ownMobility += mobility;
+                    else enemyMobility += mobility;
+                }
+            }
+
+            if (!ownKing) return -1000000;
+            if (!enemyKing) return 1000000;
+            score += (ownMobility - enemyMobility) * 2.4;
+            return score;
+        }
+
+        function astraMoveOrder(board, moves) {
+            return moves.map(m => {
+                const attacker = board[m.fromR][m.fromC];
+                const victim = board[m.toR][m.toC];
+                let priority = 0;
+                if (victim) {
+                    if (victim.type === 'k') priority += 1000000;
+                    else if (victim.type === 'q') priority += 100000;
+                    else priority += 10000 + astraPieceValue(victim) - astraPieceValue(attacker) * 0.08;
+                }
+                if (attacker && (attacker.type === 'p' || attacker.type === 'assassin') &&
+                    (m.toR === 0 || m.toR === 7)) priority += 700;
+                const fromCenter = Math.abs(3.5 - m.fromR) + Math.abs(3.5 - m.fromC);
+                const toCenter = Math.abs(3.5 - m.toR) + Math.abs(3.5 - m.toC);
+                priority += (fromCenter - toCenter) * 3;
+                return { ...m, _priority: priority };
+            }).sort((a, b) => b._priority - a._priority);
+        }
+
+        function astraQuiescence(board, alpha, beta, side, perspective, remaining) {
+            ASTRA61.nodes++;
+            const standPat = astraEvaluate(board, perspective);
+            if (side !== perspective) {
+                if (standPat <= alpha) return alpha;
+                beta = Math.min(beta, standPat);
+            } else {
+                if (standPat >= beta) return beta;
+                alpha = Math.max(alpha, standPat);
+            }
+            if (remaining <= 0) return standPat;
+
+            const captures = getAllMovesList(board, side).filter(m => board[m.toR][m.toC]);
+            const ordered = astraMoveOrder(board, captures);
+            if (side === perspective) {
+                let best = standPat;
+                for (const m of ordered) {
+                    const cap = astraApply(board, m);
+                    const value = astraQuiescence(board, alpha, beta, astraOpponent(side), perspective, remaining - 1);
+                    astraUndo(board, m, cap);
+                    best = Math.max(best, value);
+                    alpha = Math.max(alpha, best);
+                    if (alpha >= beta) break;
+                }
+                return best;
+            } else {
+                let best = standPat;
+                for (const m of ordered) {
+                    const cap = astraApply(board, m);
+                    const value = astraQuiescence(board, alpha, beta, astraOpponent(side), perspective, remaining - 1);
+                    astraUndo(board, m, cap);
+                    best = Math.min(best, value);
+                    beta = Math.min(beta, best);
+                    if (alpha >= beta) break;
+                }
+                return best;
+            }
+        }
+
+        function astraSearch(board, depth, alpha, beta, side, perspective) {
+            ASTRA61.nodes++;
+            const key = astraBoardKey(board, side, depth);
+            const cached = ASTRA61.table.get(key);
+            if (cached && cached.depth >= depth) return cached.score;
+
+            if (depth <= 0) return astraQuiescence(board, alpha, beta, side, perspective, 2);
+
+            const moves = astraMoveOrder(board, getAllMovesList(board, side));
+            if (!moves.length) return astraEvaluate(board, perspective);
+
+            const maximizing = side === perspective;
+            let best = maximizing ? -Infinity : Infinity;
+
+            for (const m of moves) {
+                const captured = astraApply(board, m);
+                const value = astraSearch(board, depth - 1, alpha, beta, astraOpponent(side), perspective);
+                astraUndo(board, m, captured);
+
+                if (maximizing) {
+                    best = Math.max(best, value);
+                    alpha = Math.max(alpha, best);
+                } else {
+                    best = Math.min(best, value);
+                    beta = Math.min(beta, best);
+                }
+                if (alpha >= beta) break;
+            }
+
+            if (ASTRA61.table.size > 18000) ASTRA61.table.clear();
+            ASTRA61.table.set(key, { depth, score: best });
+            return best;
+        }
+
+        function playAstra61(aiColor) {
+            const status = document.getElementById('ai-thinking');
+            status.innerText = 'ASTRA 6.1 • ANALYZING POSITION...';
+            ASTRA61.nodes = 0;
+            ASTRA61.table.clear();
+            ASTRA61.startedAt = performance.now();
+
+            const board = cloneLogicBoard(boardLogics);
+            const rootMoves = astraMoveOrder(board, getAllMovesList(board, aiColor));
+            let bestMove = null;
+            let bestScore = -Infinity;
+
+            // Iterative deepening: keep the best completed result at each depth.
+            for (let depth = 1; depth <= ASTRA61.maxDepth; depth++) {
+                let depthMove = null;
+                let depthScore = -Infinity;
+                let alpha = -Infinity;
+
+                for (const m of rootMoves) {
+                    const captured = astraApply(board, m);
+                    const score = astraSearch(board, depth - 1, alpha, Infinity, astraOpponent(aiColor), aiColor);
+                    const repetitionPenalty = astraRepetitionPenalty({ ...m, color: aiColor, type: board[m.toR][m.toC]?.type || 'unknown' }, board, astraOpponent(aiColor));
+                    const adjustedScore = score - repetitionPenalty;
+                    astraUndo(board, m, captured);
+
+                    if (adjustedScore > depthScore) {
+                        depthScore = adjustedScore;
+                        depthMove = m;
+                    }
+                    alpha = Math.max(alpha, depthScore);
+                }
+
+                if (depthMove) {
+                    bestMove = depthMove;
+                    bestScore = depthScore;
+                }
+            }
+
+            const elapsed = Math.max(1, Math.round(performance.now() - ASTRA61.startedAt));
+            status.innerText = `ASTRA 6.1 • ${ASTRA61.nodes.toLocaleString()} NODES • ${elapsed} MS`;
+            // Release the input lock before the move animation begins.
+            isAiThinking = false;
+            setTimeout(() => {
+                status.classList.add('hidden');
+                if (bestMove) executeMove(bestMove.fromR, bestMove.fromC, bestMove.toR, bestMove.toC);
+            }, 180);
+        }
+
+        // === REBUILD BOARD FOR THEMES ===
+        function rebuildBoard() {
+            for (let r = 0; r < 8; r++) { for (let c = 0; c < 8; c++) { const p = boardLogics[r][c]; if (p && p.mesh) cleanupTargetMesh(p.mesh); } }
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const p = boardLogics[r][c];
+                    if (p) { const newMesh = createPiece3D(p.type, p.color); newMesh.position.set(c - 3.5, 0.1, r - 3.5); newMesh.userData = { r, c, isPiece: true, type: p.type, color: p.color }; scene.add(newMesh); p.mesh = newMesh; }
+                }
+            }
+        }
+
+        // === UTILS & UI ===
+        window.toggleTheme = function() {
+            playAudio('click');
+            themeIndex = (themeIndex + 1) % THEMES.length; currentTheme = THEMES[themeIndex];
+            const themeBtn = document.getElementById('theme-toggle-btn');
+            
+            // Labels for UI
+            const lblTeam1 = document.getElementById('lbl-team-white'); const selWhite = document.getElementById('sel-white');
+            const lblTeam2 = document.getElementById('lbl-team-black'); const selBlack = document.getElementById('sel-black');
+            const txtPtW = document.getElementById('text-pt-white'); const txtPtB = document.getElementById('text-pt-black');
+            const settingsBtn = document.getElementById('settings-btn');
+            
+            if (currentTheme === 'neon') {
+                themeBtn.innerText = 'THEME: CYBER NEON'; themeBtn.className = 'w-full py-2 rounded text-xs font-bold tracking-widest border border-[#00f3ff] text-[#00f3ff] hover:bg-[#00f3ff]/10 transition';
+                settingsBtn.className = 'px-3 md:px-4 py-1.5 md:py-2 rounded-lg border border-[#00f3ff] text-[#00f3ff] text-[10px] md:text-xs font-bold tracking-widest transition hover:bg-[#00f3ff]/10 glass-panel';
+                lblTeam1.innerText = 'WHITE TEAM'; lblTeam1.className = 'text-[9px] md:text-[10px] font-bold text-[#00f3ff] text-center mb-1 tracking-widest';
+                selWhite.className = 'bg-black/50 text-white border border-[#00f3ff]/50 rounded p-1 w-full text-[8px] md:text-[9px] tracking-widest outline-none';
+                lblTeam2.innerText = 'BLACK TEAM'; lblTeam2.className = 'text-[9px] md:text-[10px] font-bold text-[#ff0055] text-center mb-1 tracking-widest';
+                selBlack.className = 'bg-black/50 text-white border border-[#ff0055]/50 rounded p-1 w-full text-[8px] md:text-[9px] tracking-widest outline-none';
+                txtPtW.innerText = 'WHITE'; txtPtW.className = 'text-[9px] md:text-[10px] text-[#00f3ff] font-bold';
+                txtPtB.innerText = 'BLACK'; txtPtB.className = 'text-[9px] md:text-[10px] text-[#ff0055] font-bold';
+                
+                matHighlight.color.setHex(0x00f3ff); matHighlight.emissive.setHex(0x00f3ff); matEnemyHighlight.color.setHex(0xff0055); matEnemyHighlight.emissive.setHex(0xff0055);
+                frameMesh.visible = true; imperialFrameGroup.visible = false;
+                squares.forEach(sq => { let isLight = (sq.userData.r + sq.userData.c) % 2 === 0; sq.userData.baseMaterial = isLight ? matBoardGlass : matBoardDark; });
+                updateEdgeLightsTheme(0xff0055, 0x00f3ff); // Red top, Cyan bottom
+            } 
+            else if (currentTheme === 'black_neon') {
+                themeBtn.innerText = 'THEME: BLACK NEON'; themeBtn.className = 'w-full py-2 rounded text-xs font-bold tracking-widest border border-[#aa00ff] text-[#aa00ff] hover:bg-[#aa00ff]/10 transition';
+                settingsBtn.className = 'px-3 md:px-4 py-1.5 md:py-2 rounded-lg border border-[#aa00ff] text-[#aa00ff] text-[10px] md:text-xs font-bold tracking-widest transition hover:bg-[#aa00ff]/10 glass-panel';
+                lblTeam1.innerText = 'BLUE TEAM'; lblTeam1.className = 'text-[9px] md:text-[10px] font-bold text-[#168cff] text-center mb-1 tracking-widest';
+                selWhite.className = 'bg-black/50 text-white border border-[#168cff]/50 rounded p-1 w-full text-[8px] md:text-[9px] tracking-widest outline-none';
+                lblTeam2.innerText = 'PURPLE TEAM'; lblTeam2.className = 'text-[9px] md:text-[10px] font-bold text-[#aa00ff] text-center mb-1 tracking-widest';
+                selBlack.className = 'bg-black/50 text-white border border-[#aa00ff]/50 rounded p-1 w-full text-[8px] md:text-[9px] tracking-widest outline-none';
+                txtPtW.innerText = 'BLUE'; txtPtW.className = 'text-[9px] md:text-[10px] text-[#168cff] font-bold';
+                txtPtB.innerText = 'PURPLE'; txtPtB.className = 'text-[9px] md:text-[10px] text-[#aa00ff] font-bold';
+                
+                matHighlight.color.setHex(0x168cff); matHighlight.emissive.setHex(0x168cff); matEnemyHighlight.color.setHex(0xaa00ff); matEnemyHighlight.emissive.setHex(0xaa00ff);
+                frameMesh.visible = true; imperialFrameGroup.visible = false;
+                squares.forEach(sq => { let isLight = (sq.userData.r + sq.userData.c) % 2 === 0; sq.userData.baseMaterial = isLight ? matBoardGlass : matBoardDark; });
+                updateEdgeLightsTheme(0xaa00ff, 0x168cff); // Purple top, Blue bottom
+            } 
+            else if (currentTheme === 'imperial_king') {
+                themeBtn.innerText = 'THEME: IMPERIAL KING'; themeBtn.className = 'w-full py-2 rounded text-xs font-bold tracking-widest border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37]/10 transition';
+                settingsBtn.className = 'px-3 md:px-4 py-1.5 md:py-2 rounded-lg border border-[#d4af37] text-[#d4af37] text-[10px] md:text-xs font-bold tracking-widest transition hover:bg-[#d4af37]/10 glass-panel';
+                lblTeam1.innerText = 'SILVER TEAM'; lblTeam1.className = 'text-[9px] md:text-[10px] font-bold text-[#168cff] text-center mb-1 tracking-widest';
+                selWhite.className = 'bg-black/50 text-white border border-[#168cff]/50 rounded p-1 w-full text-[8px] md:text-[9px] tracking-widest outline-none';
+                lblTeam2.innerText = 'GOLD TEAM'; lblTeam2.className = 'text-[9px] md:text-[10px] font-bold text-[#d4af37] text-center mb-1 tracking-widest';
+                selBlack.className = 'bg-black/50 text-white border border-[#d4af37]/50 rounded p-1 w-full text-[8px] md:text-[9px] tracking-widest outline-none';
+                txtPtW.innerText = 'SILVER'; txtPtW.className = 'text-[9px] md:text-[10px] text-[#168cff] font-bold';
+                txtPtB.innerText = 'GOLD'; txtPtB.className = 'text-[9px] md:text-[10px] text-[#d4af37] font-bold';
+                
+                matHighlight.color.setHex(0x168cff); matHighlight.emissive.setHex(0x168cff); matEnemyHighlight.color.setHex(0xaa00ff); matEnemyHighlight.emissive.setHex(0xaa00ff);
+                frameMesh.visible = false; imperialFrameGroup.visible = true;
+                squares.forEach(sq => { let isLight = (sq.userData.r + sq.userData.c) % 2 === 0; sq.userData.baseMaterial = isLight ? matCrystalBoardLight : matCrystalBoardDark; });
+                updateEdgeLightsTheme(0xd4af37, 0x168cff); // Gold top, Silver bottom
+            }
+            
+            rebuildBoard(); highlightSquares(); updateUI();
+        };
+
+        window.selectShop = function(type) {
+            if(phase !== 'setup') return; playAudio('click'); activeShopItem = (activeShopItem === type) ? null : type;
+            document.querySelectorAll('.btn-shop').forEach(b => b.classList.remove('selected')); if(activeShopItem) document.getElementById('shop-' + type).classList.add('selected');
+        }
+
+        window.startGame = function() {
+            if (phase !== 'setup') return;
+            capturedPieces = { white: [], black: [] };
+            playAudio('click');
+            
+            // Get Dynamic Team Assignments
+            players.white = document.getElementById('sel-white').value;
+            players.black = document.getElementById('sel-black').value;
+            
+            saveSnapshot(); phase = 'play'; activeShopItem = null;
+            astraGameMoves = []; astraPositionCounts = new Map();
+            astraRecordPosition(boardLogics, turn);
+            document.querySelectorAll('.btn-shop').forEach(b => b.classList.remove('selected'));
+            document.getElementById('shop-panel').style.display = 'none'; document.getElementById('setup-info').style.display = 'none';
+            document.getElementById('turn-indicator').classList.remove('hidden');
+            camera.position.set(0, 10, 12); camera.lookAt(0,0,0);
+            updateUI();
+            
+            // Kickstart if White is AI
+            if (players.white !== 'player') {
+                isAiThinking = true;
+                const aiEl = document.getElementById('ai-thinking'); aiEl.classList.remove('hidden');
+                let botName = players.white === 'bot_astra' ? 'AI CHAT GPT ASTRA 6.1' : (players.white === 'bot_gemini' ? 'AI GEMINI PRO 4.1' : 'BOT (BASIC)');
+                let colorName = currentTheme === 'neon' ? 'WHITE' : (currentTheme === 'imperial_king' ? 'SILVER' : 'BLUE');
+                aiEl.innerText = `${botName} [${colorName}] COMPUTING...`;
+                
+                setTimeout(() => {
+                    if (players.white === 'bot_astra') playAstra61('white');
+                    else if (players.white === 'bot_gemini') playAIGemini('white');
+                    else playAITurn('white');
+                }, 1500);
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('pt-white').innerText = points.white; document.getElementById('pt-black').innerText = points.black;
+            if(phase === 'play') {
+                const tInd = document.getElementById('turn-indicator');
+                if (currentTheme === 'neon') {
+                    if(turn === 'white') { tInd.innerText = "WHITE'S TURN"; tInd.className = "px-2 md:px-3 py-1 rounded text-center font-bold tracking-widest border border-[#00f3ff] text-[#00f3ff] bg-[#00f3ff]/20 shadow-[0_0_10px_rgba(0,243,255,0.4)] text-[10px] md:text-xs"; } 
+                    else { tInd.innerText = "BLACK'S TURN"; tInd.className = "px-2 md:px-3 py-1 rounded text-center font-bold tracking-widest border border-[#ff0055] text-[#ff0055] bg-[#ff0055]/20 shadow-[0_0_10px_rgba(255,0,85,0.4)] text-[10px] md:text-xs"; }
+                } else if (currentTheme === 'black_neon') {
+                    if(turn === 'white') { tInd.innerText = "BLUE'S TURN"; tInd.className = "px-2 md:px-3 py-1 rounded text-center font-bold tracking-widest border border-[#168cff] text-[#168cff] bg-[#168cff]/20 shadow-[0_0_10px_rgba(22,140,255,0.4)] text-[10px] md:text-xs"; } 
+                    else { tInd.innerText = "PURPLE'S TURN"; tInd.className = "px-2 md:px-3 py-1 rounded text-center font-bold tracking-widest border border-[#aa00ff] text-[#aa00ff] bg-[#aa00ff]/20 shadow-[0_0_10px_rgba(170,0,255,0.4)] text-[10px] md:text-xs"; }
+                } else {
+                    if(turn === 'white') { tInd.innerText = "SILVER'S TURN"; tInd.className = "px-2 md:px-3 py-1 rounded text-center font-bold tracking-widest border border-[#168cff] text-[#168cff] bg-[#168cff]/20 shadow-[0_0_10px_rgba(22,140,255,0.4)] text-[10px] md:text-xs"; } 
+                    else { tInd.innerText = "GOLD'S TURN"; tInd.className = "px-2 md:px-3 py-1 rounded text-center font-bold tracking-widest border border-[#d4af37] text-[#d4af37] bg-[#d4af37]/20 shadow-[0_0_10px_rgba(212,175,55,0.4)] text-[10px] md:text-xs"; }
+                }
+            } updateMinimap();
+        }
+
+        function updateMinimap() {
+            const mm = document.getElementById('minimap'); if(!mm) return; mm.innerHTML = '';
+            for(let r=0; r<8; r++) {
+                for(let c=0; c<8; c++) {
+                    const cell = document.createElement('div'); const isLight = (r+c)%2 === 0;
+                    cell.className = `radar-cell ${isLight ? 'bg-white/10' : 'bg-transparent'}`;
+                    if (selectedSquare && selectedSquare.r === r && selectedSquare.c === c) cell.classList.add('bg-white/50');
+                    const isMove = validMovesCache.find(m => m.r === r && m.c === c);
+                    if (isMove) {
+                        if (currentTheme === 'neon') cell.classList.add(isMove.cap ? 'bg-[#ff0055]/70' : 'bg-[#00f3ff]/60');
+                        else cell.classList.add(isMove.cap ? 'bg-[#aa00ff]/70' : 'bg-[#168cff]/60');
+                    }
+                    const p = boardLogics[r][c];
+                    if(p) {
+                        cell.innerText = EMOJI_MAP[p.color][p.type];
+                        if (currentTheme === 'neon') { cell.style.color = p.color === 'white' ? '#00f3ff' : '#ff0055'; cell.style.textShadow = `0 0 5px ${p.color === 'white' ? '#00f3ff' : '#ff0055'}`; } 
+                        else if (currentTheme === 'imperial_king') { cell.style.color = p.color === 'white' ? '#168cff' : '#d4af37'; cell.style.textShadow = `0 0 5px ${p.color === 'white' ? '#168cff' : '#d4af37'}`; }
+                        else { cell.style.color = p.color === 'white' ? '#168cff' : '#aa00ff'; cell.style.textShadow = `0 0 5px ${p.color === 'white' ? '#168cff' : '#aa00ff'}`; }
+                    }
+                    cell.onpointerdown = (e) => { e.stopPropagation(); }; cell.onclick = (e) => { e.stopPropagation(); handleGridClick(r, c); }; mm.appendChild(cell);
+                }
+            }
+        }
+
+        function highlightSquares() {
+            squares.forEach(sq => { sq.material = sq.userData.baseMaterial; });
+            if(selectedSquare) squares[selectedSquare.r * 8 + selectedSquare.c].material = matHighlight;
+            validMovesCache.forEach(m => { squares[m.r * 8 + m.c].material = m.cap ? matEnemyHighlight : matHighlight; });
+            updateMinimap();
+        }
+
+        function saveSnapshot() {
+            const snapshot = { board: boardLogics.map(row => row.map(p => p ? { type: p.type, color: p.color } : null)), points: { ...points }, phase, turn, players: { ...players }, astraGameMoves: astraGameMoves.slice(), capturedPieces: { white: capturedPieces.white.slice(), black: capturedPieces.black.slice() } };
+            actionHistory.push(snapshot); if (actionHistory.length > 50) actionHistory.shift(); updateUndoButton();
+        }
+
+        function updateUndoButton() {
+            const btn = document.getElementById('undo-btn'); if (!btn) return;
+            btn.disabled = actionHistory.length === 0; btn.classList.toggle('text-white', actionHistory.length > 0); btn.classList.toggle('text-gray-500', actionHistory.length === 0);
+        }
+
+        window.undoAction = function() {
+            if (!actionHistory.length || isAiThinking || isAnimatingMove) return; playAudio('click');
+            const snapshot = actionHistory.pop();
+            for (let r = 0; r < 8; r++) { for (let c = 0; c < 8; c++) { if (boardLogics[r][c]) cleanupTargetMesh(boardLogics[r][c].mesh); } }
+            points = { ...snapshot.points }; phase = snapshot.phase; turn = snapshot.turn; players = { ...snapshot.players };
+            astraGameMoves = (snapshot.astraGameMoves || []).slice(); astraRebuildPositionCounts();
+            capturedPieces = snapshot.capturedPieces ? { white: snapshot.capturedPieces.white.slice(), black: snapshot.capturedPieces.black.slice() } : { white: [], black: [] };
+            selectedSquare = null; validMovesCache = []; activeShopItem = null;
+            snapshot.board.forEach((row, r) => row.forEach((p, c) => { boardLogics[r][c] = null; if (p) addPiece(r, c, p.type, p.color); }));
+            document.getElementById('shop-panel').style.display = phase === 'setup' ? 'flex' : 'none';
+            document.getElementById('setup-info').style.display = phase === 'setup' ? 'flex' : 'none';
+            document.getElementById('game-over').classList.add('hidden');
+            document.getElementById('turn-indicator').classList.toggle('hidden', phase !== 'play');
+            document.querySelectorAll('.btn-shop').forEach(b => b.classList.remove('selected'));
+            highlightSquares(); updateUI(); updateUndoButton();
+        };
+
+        function showGameOver(winColor) {
+            const el = document.getElementById('game-over'); const txt = document.getElementById('winner-text'); el.classList.remove('hidden');
+            if (currentTheme === 'neon') {
+                if (winColor === 'white') { txt.innerText = 'WHITE WINS'; txt.className = 'text-3xl md:text-5xl font-bold text-[#00f3ff] mb-2 drop-shadow-[0_0_15px_rgba(0,243,255,0.8)]'; } 
+                else { txt.innerText = 'BLACK WINS'; txt.className = 'text-3xl md:text-5xl font-bold text-[#ff0055] mb-2 drop-shadow-[0_0_15px_rgba(255,0,85,0.8)]'; }
+            } else if (currentTheme === 'imperial_king') {
+                if (winColor === 'white') { txt.innerText = 'SILVER WINS'; txt.className = 'text-3xl md:text-5xl font-bold text-[#168cff] mb-2 drop-shadow-[0_0_15px_rgba(22,140,255,0.8)]'; } 
+                else { txt.innerText = 'GOLD WINS'; txt.className = 'text-3xl md:text-5xl font-bold text-[#d4af37] mb-2 drop-shadow-[0_0_15px_rgba(212,175,55,0.8)]'; }
+            } else {
+                if (winColor === 'white') { txt.innerText = 'BLUE WINS'; txt.className = 'text-3xl md:text-5xl font-bold text-[#168cff] mb-2 drop-shadow-[0_0_15px_rgba(22,140,255,0.8)]'; } 
+                else { txt.innerText = 'PURPLE WINS'; txt.className = 'text-3xl md:text-5xl font-bold text-[#aa00ff] mb-2 drop-shadow-[0_0_15px_rgba(170,0,255,0.8)]'; }
+            }
+        }
+
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+        initBoard();
+        function animate() {
+            requestAnimationFrame(animate);
+            auras.forEach(aura => { const pos = aura.geometry.attributes.position.array; for (let i = 1; i < pos.length; i += 3) { pos[i] += 0.015; if (pos[i] > 2.0) pos[i] = 0; } aura.geometry.attributes.position.needsUpdate = true; });
+            for (let i = hitAnimations.length - 1; i >= 0; i--) {
+                let anim = hitAnimations[i]; let elapsed = performance.now() - anim.startTime; let progress = elapsed / anim.duration;
+                if (elapsed >= anim.duration) { anim.mesh.visible = false; scene.remove(anim.light); if (anim.onComplete) anim.onComplete(); hitAnimations.splice(i, 1); } 
+                else { anim.light.intensity = 3 + Math.sin(elapsed * 0.05) * 2; anim.mesh.position.x = anim.startX + (Math.random() - 0.5) * 0.06; anim.mesh.position.z = anim.startZ + (Math.random() - 0.5) * 0.06; let scale = 1.0 - (progress * 0.3) + Math.sin(progress * Math.PI * 4) * 0.05; anim.mesh.scale.set(scale, scale, scale); }
+            }
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                const exp = explosions[i]; const positions = exp.geometry.attributes.position.array; const velocities = exp.geometry.attributes.velocity.array;
+                for (let j = 0; j < positions.length; j += 3) { positions[j] += velocities[j]; positions[j+1] += velocities[j+1]; positions[j+2] += velocities[j+2]; }
+                exp.geometry.attributes.position.needsUpdate = true; exp.material.opacity -= 0.015; 
+                if (exp.material.opacity <= 0) { scene.remove(exp); exp.geometry.dispose(); exp.material.dispose(); explosions.splice(i, 1); }
+            }
+            controls.update(); renderer.render(scene, camera);
+        } animate();
+    </script>
+</body>
+</html>
